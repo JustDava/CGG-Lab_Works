@@ -1,5 +1,8 @@
-﻿#include "framework.h"
-#include "CGG-Lab_1.h"
+﻿// CGG-Lab_2.3.cpp : Определяет точку входа для приложения.
+//
+
+#include "framework.h"
+#include "CGG-Lab_2.3.h"
 
 #include <windows.h>
 #include <objidl.h>
@@ -14,9 +17,6 @@ using namespace Gdiplus;
 // Глобальные переменные:
 GdiplusStartupInput gdiplusStartupInput;
 ULONG_PTR           gdiplusToken;
-
-Image* textureimg;
-Image* bikeimg;
 
 HINSTANCE hInst;                                // текущий экземпляр
 WCHAR szTitle[MAX_LOADSTRING];                  // Текст строки заголовка
@@ -44,7 +44,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
 
     // Инициализация глобальных строк
     LoadStringW(hInstance, IDS_APP_TITLE, szTitle, MAX_LOADSTRING);
-    LoadStringW(hInstance, IDC_CGGLAB1, szWindowClass, MAX_LOADSTRING);
+    LoadStringW(hInstance, IDC_CGGLAB23, szWindowClass, MAX_LOADSTRING);
     MyRegisterClass(hInstance);
 
     // Выполнить инициализацию приложения:
@@ -53,7 +53,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
         return FALSE;
     }
 
-    HACCEL hAccelTable = LoadAccelerators(hInstance, MAKEINTRESOURCE(IDC_CGGLAB1));
+    HACCEL hAccelTable = LoadAccelerators(hInstance, MAKEINTRESOURCE(IDC_CGGLAB23));
 
     MSG msg;
 
@@ -88,10 +88,10 @@ ATOM MyRegisterClass(HINSTANCE hInstance)
     wcex.cbClsExtra = 0;
     wcex.cbWndExtra = 0;
     wcex.hInstance = hInstance;
-    wcex.hIcon = LoadIcon(hInstance, MAKEINTRESOURCE(IDC_CGGLAB1));
+    wcex.hIcon = LoadIcon(hInstance, MAKEINTRESOURCE(IDC_CGGLAB23));
     wcex.hCursor = LoadCursor(nullptr, IDC_ARROW);
     wcex.hbrBackground = (HBRUSH)(COLOR_WINDOW + 1);
-    wcex.lpszMenuName = MAKEINTRESOURCEW(IDC_CGGLAB1);
+    wcex.lpszMenuName = MAKEINTRESOURCEW(IDC_CGGLAB23);
     wcex.lpszClassName = szWindowClass;
     wcex.hIconSm = LoadIcon(wcex.hInstance, MAKEINTRESOURCE(IDI_SMALL));
 
@@ -115,8 +115,6 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
     HWND hWnd = CreateWindowW(szWindowClass, szTitle, WS_OVERLAPPEDWINDOW,
         100, 100, 1280, 720, nullptr, nullptr, hInstance, nullptr);
 
-    textureimg = Image::FromFile(L"Road.png");
-    bikeimg = Image::FromFile(L"Bike.png");
 
     if (!hWnd)
     {
@@ -171,14 +169,6 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
     }
     break;
     case WM_DESTROY:
-        if (textureimg != NULL)
-        {
-            delete textureimg;
-        }
-        if (bikeimg != NULL)
-        {
-            delete bikeimg;
-        }
         PostQuitMessage(0);
         break;
     default:
@@ -213,25 +203,44 @@ VOID Display(HDC hdc)
     g.Clear(Color::White);
     g.SetSmoothingMode(SmoothingModeHighQuality);
 
-    // Текстурная кист    
-    if (textureimg != NULL)
-    {
-        TextureBrush textureBrush(textureimg, WrapModeTile);
-        g.FillRectangle(&textureBrush, 0, 0, 1280, 640);
-    }
-
     // Колеса
-    Pen compPen(Color::Black, 10.f);
+
+    Region rgn;
+
+    Region rgn1(Rect(350, 350, 110, 180));
+    Pen compPen1(Color::Black, 10.f);
     float comp[6] = {
         0.0f, 0.2f,
         0.3f, 0.7f,
         0.8f, 1.0f };
-    compPen.SetCompoundArray(comp, 6);
-    g.DrawEllipse(&compPen, 400, 400, 120, 120);    //заднее колесо    
-    g.DrawEllipse(&compPen, 620, 400, 120, 120);    //переднее колесо
+    compPen1.SetCompoundArray(comp, 6);
+
+    g.SetClip(&rgn1);
+    g.DrawEllipse(&compPen1, 400, 400, 120, 120);    //заднее колесо    
+    g.SetClip(&rgn);
+    
+    Region rgn2(Rect(460, 350, 110, 180));
+    Pen compPen2(Color::DarkCyan, 10.f);
+    compPen2.SetCompoundArray(comp, 6);
+
+    g.SetClip(&rgn2);
+    g.DrawEllipse(&compPen2, 400, 400, 120, 120);
+    g.SetClip(&rgn);
+
+    Region rgn3(Rect(600, 350, 80, 180));
+    g.SetClip(&rgn3);
+    g.DrawEllipse(&compPen2, 620, 400, 120, 120);
+    g.SetClip(&rgn);
+
+    Region rgn4(Rect(680, 350, 80, 180));
+    g.SetClip(&rgn4);
+    g.DrawEllipse(&compPen1, 620, 400, 120, 120);    //переднее колесо
+    g.SetClip(&rgn);
 
     HatchBrush hatchBrush(HatchStyleOutlinedDiamond, Color::Gray, Color::White);
+
     g.FillEllipse(&hatchBrush, 400, 400, 120, 120);    //заднее колесо    
+
     g.FillEllipse(&hatchBrush, 620, 400, 120, 120);    //переднее колесо
 
     //g.FillEllipse(&hatchBrush, 447, 447, 26, 26);  //задняя ось
@@ -270,18 +279,4 @@ VOID Display(HDC hdc)
     Point Qpt1(460, 340);
     Point Qpt2(490, 340);
     g.DrawLine(&blackPen, Qpt1, Qpt2);
-
-    // Вывод текста
-    Font font(L"Calibre", 20.f, FontStyleBoldItalic);
-    SolidBrush blackBrush(Color::Black);
-    StringFormat sf;
-    RectF rect(10.f, 10.f, 200.f, 80.f);
-
-    g.DrawString(L"Велосипед", -1, &font, rect, &sf, &blackBrush);
-
-    // Вывод изображения    
-    if (bikeimg != NULL)
-    {
-        g.DrawImage(bikeimg, 0, 50, 250, 250);
-    }
 }
