@@ -1,441 +1,223 @@
-﻿// CGG-Lab_2.2.cpp : Определяет точку входа для приложения.
-//
-
-#include "framework.h"
-#include "CGG-Lab_2.2.h"
-
-#define _USE_MATH_DEFINES
-#include <math.h>
-#include <vector>
-#include <windows.h>
-#include <objidl.h>
-#include <gdiplus.h>
-#include "Resource.h"
+﻿#include<windows.h>
+#include<Windowsx.h>
+#include<gdiplus.h>
+#include<gdiplustypes.h>
+#include <string>
+#include <tchar.h>
+#include<Strsafe.h>
+#include<vector>
+#include <cmath>
+#define PI 3.14159265
+#pragma comment(lib,"Gdiplus.lib")
 using namespace Gdiplus;
-#pragma comment (lib,"Gdiplus.lib")
-
-
-
-#define MAX_LOADSTRING 100
-
-#define LEFT    1
-#define RIGHT   2
-#define BOT     4
-#define TOP     8
-
-class WorldWindow
+using namespace std;
+VOID OnPaint(HDC hdc);
+LRESULT CALLBACK WndProc(HWND, UINT, WPARAM, LPARAM);
+INT WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, PSTR, INT iCmdShow)
 {
-public:
-    float Left;
-    float Top;
-    float Right;
-    float Bottom;
-
-    inline WorldWindow(float left, float top, float right, float bottom) : Left(left), Top(top), Right(right), Bottom(bottom) {}
-
-    //inline float Width() const
-    //{
-    //    return (Right - Left);
-    //}
-    //inline float Height() const
-    //{
-    //    return (Top - Bottom);
-    //}
+	HWND hWnd;
+	MSG msg;
+	WNDCLASS wndClass;
+	GdiplusStartupInput gdiplusStartupInput;
+	ULONG_PTR gdiplusToken;
+	GdiplusStartup(&gdiplusToken, &gdiplusStartupInput, NULL);
+	wndClass.style = CS_HREDRAW | CS_VREDRAW;
+	wndClass.lpfnWndProc = WndProc;
+	wndClass.cbClsExtra = 0;
+	wndClass.cbWndExtra = 0;
+	wndClass.hInstance = hInstance;
+	wndClass.hIcon = LoadIcon(NULL, IDI_APPLICATION);
+	wndClass.hCursor = LoadCursor(NULL, IDC_ARROW);
+	wndClass.hbrBackground = (HBRUSH)GetStockObject(WHITE_BRUSH);
+	wndClass.lpszMenuName = NULL;
+	wndClass.lpszClassName = TEXT("Коэн-Сазерланд ");
+	RegisterClass(&wndClass);
+	hWnd = CreateWindow(
+		TEXT("Коэн-Сазерланд "), TEXT("Коэн-Сазерланд "), WS_SYSMENU,
+		CW_USEDEFAULT, CW_USEDEFAULT, 700, 700,
+		NULL, NULL, hInstance, NULL);
+	ShowWindow(hWnd, iCmdShow);
+	UpdateWindow(hWnd);
+	while (GetMessage(&msg, NULL, 0, 0))
+	{
+		TranslateMessage(&msg);
+		DispatchMessage(&msg);
+	}
+	GdiplusShutdown(gdiplusToken);
+	return msg.wParam;
+}
+LRESULT CALLBACK WndProc(HWND hWnd, UINT message,
+	WPARAM wParam, LPARAM lParam)
+{
+	HDC hdc;
+	PAINTSTRUCT ps;
+	switch (message)
+	{
+	case WM_INITDIALOG:
+		return 0;
+	case WM_PAINT:
+		hdc = BeginPaint(hWnd, &ps);
+		OnPaint(hdc);
+		EndPaint(hWnd, &ps);
+		return 0;
+	case WM_DESTROY:
+		PostQuitMessage(0);
+		return 0;
+	default:
+		return DefWindowProc(hWnd, message, wParam, lParam);
+	}
+}
+template <class Func>
+inline std::vector<Gdiplus::GpPointF> Curve(float tMin, float tMax, size_t n, Func f) {
+	std::vector<Gdiplus::GpPointF> result;
+	if (n > 1)
+	{
+		result.reserve(n); // зарезервируем место для n точек
+		// определяем шаг изменения t
+		float dt = (tMax - tMin) / (float)(n - 1);
+		for (size_t i = 0; i < n; ++i)
+		{
+			// добавим точку в массив
+			result.push_back(f(tMin + i * dt));
+		}
+	}
+	return result;
+}
+struct WorldWindow
+{
+	REAL m00, m11, m02, m12;
+	template<class T>
+	WorldWindow(T l, T r, T b, T t)
+		: m00(static_cast<REAL>(2) / (r - l))
+		, m11(static_cast<REAL>(2) / (t - b))
+		, m02(static_cast<REAL>(-(r + l)) / (r - l))
+		, m12(static_cast<REAL>(-(t + b)) / (t - b))
+	{}
+	GpPointF map(GpPointF p) const
+	{
+		return { p.X * m00 + m02, p.Y * m11 + m12 };
+	}
 };
-
-class ViewPort : public Gdiplus::Rect
+struct Viewport
 {
-public:
-    inline ViewPort(int left, int top, int right, int bottom) : Gdiplus::Rect(left, top, right-left, bottom-top) {}
-
-    //inline ViewPort(const RECT &rect) : Gdiplus::Rect(rect.left, rect.top, rect.right - rect.left, rect.bottom - rect.top) {}
-
-    //inline operator RECT() const
-    //{
-    //    RECT rect = { X, Y, X + Width, Y + Width };
-    //    return rect;
-    //}
+	GpRectF r;
+	template<class T>
+	Viewport(T l, T t, T r, T b)
+		: r(static_cast<REAL>(l),
+			static_cast<REAL>(t),
+			static_cast<REAL>(r - l)* static_cast<REAL>(0.5),
+			static_cast<REAL>(b - t)* static_cast<REAL>(0.5))
+	{}
+	GpPointF map(GpPointF p) const
+	{
+		return
+		{
+		r.X + (p.X + static_cast<REAL>(1)) * r.Width,
+		r.Y + (static_cast<REAL>(1) - p.Y) * r.Height
+		};
+	}
 };
-
-inline void WorldToViewport(const WorldWindow& w, const ViewPort& vp, Gdiplus::PointF* points, unsigned int count)
+using vec2f = GpPointF;
+struct clipper
 {
-    float A = vp.Width / (w.Right - w.Left);
-    float B = vp.Height / (w.Bottom - w.Top);
-    float C = vp.X - A * w.Left;
-    float D = vp.Y - B * w.Top;
-
-    for (unsigned int i = 0; i < count; i++)
-    {
-        points[i].X = A * points[i].X + C;
-        points[i].Y = B * points[i].Y + D;
-    }
+	enum region : uint32_t
+	{
+		INSIDE = 0,
+		LEFT = 1,
+		RIGHT = 1 << 1,
+		BOTTOM = 1 << 2,
+		TOP = 1 << 3
+	};
+	static constexpr float border = 1;
+	static uint32_t clip_point(const vec2f& point)
+	{
+		uint32_t result = INSIDE;
+		if (point.X < -border)
+			result |= LEFT;
+		else if (border < point.X)
+			result |= RIGHT;
+		if (point.Y < -border)
+			result |= BOTTOM;
+		else if (border < point.Y)
+			result |= TOP;
+		return result;
+	}
+	static bool clip_line(vec2f& first, vec2f& second)
+	{
+		uint32_t first_pos = clip_point(first);
+		uint32_t second_pos = clip_point(second);
+		while (true)
+		{
+			if ((first_pos | second_pos) == INSIDE)
+				return true;
+			else if ((first_pos & second_pos))
+				return false;
+			else
+			{
+				const vec2f delta = second - first;
+				uint32_t* pos = &first_pos;
+				vec2f* point = &first;
+				if (*pos == INSIDE)
+				{
+					pos = &second_pos;
+					point = &second;
+				}
+				if (*pos & TOP)
+				{
+					point->X = first.X + delta.X * (border - first.Y) / delta.Y;
+					point->Y = border;
+				}
+				else if (*pos & BOTTOM)
+				{
+					point->X = first.X + delta.X * (-border - first.Y) / delta.Y;
+					point->Y = -border;
+				}
+				else if (*pos & RIGHT)
+				{
+					point->Y = first.Y + delta.Y * (border - first.X) / delta.X;
+					point->X = border;
+				}
+				else // if (*pos & LEFT)
+				{
+					point->Y = first.Y + delta.Y * (-border - first.X) / delta.X;
+					point->X = -border;
+				}
+				*pos = clip_point(*point);
+			}
+		}
+	}
+};
+void DrawPolyline(Gdiplus::Graphics& g, const Gdiplus::Pen* pen, const std::vector<Gdiplus::GpPointF>& polyline,
+	const WorldWindow& w, const Viewport& vp)
+{
+	for (size_t i = 1; i < polyline.size(); ++i)
+	{
+		GpPointF points[2] = { w.map(polyline[i - 1]), w.map(polyline[i]) };
+		if (clipper::clip_line(points[0], points[1]))
+		{
+			points[0] = vp.map(points[0]);
+			points[1] = vp.map(points[1]);
+			// рисуем ребро
+			g.DrawLines(pen, points, 2);
+		} // if
+	} // for
+} // DrawPolyline
+Gdiplus::GpPointF f(REAL t)
+{
+	GpPointF res;
+	res.X = 24.f * std::cos(t) - 5.f * std::cos(24.f * t / 5.f);
+	res.Y = 24.f * std::sin(t) - 5.f * std::sin(24.f * t / 5.f);
+	return res;
 }
-
-int vcode(RectF* r, PointF* p)
+VOID OnPaint(HDC hdc)
 {
-    int code = 0;
-    if (p->X < r->GetLeft())
-    {
-        code += LEFT;
-    }
-    if (p->X > r->GetRight())
-    {
-        code += RIGHT;
-    }
-    if (p->Y > r->GetBottom())
-    {
-        code += BOT;
-    }
-    if (p->Y < r->GetTop())
-    {
-        code += TOP;
-    }
-    return code;
-}
-
-void Display(HDC hdc, PointF* a, PointF* b)
-{
-    Graphics g(hdc);
-        
-    Pen pen(Color::Black);
-
-    g.DrawLine(&pen, *a, *b);
-}
-
-int cohen_sutherland(RectF* r, PointF* points, unsigned int count, HDC hdc)
-{
-    int code_a, code_b, code; /* код концов отрезка */
-    PointF* c; /* одна из точек */
-    int i, j = 0;
-    for (i = 0, j = count - 1; i < count; j = i++)
-    {       
-        code_a = vcode(r, &points[i]);
-        code_b = vcode(r, &points[j]);
-
-        while (code_a | code_b) {
-
-            //if (code_a & code_b)
-            //{
-            //    break;
-            //}
-
-            if (code_a) {
-                code = code_a;
-                c = &points[i];
-            }
-            else {
-                code = code_b;
-                c = &points[j];
-            }
-
-            if (code & LEFT) {
-                c->Y += (&points[i].Y - &points[j].Y) * (float)(r->GetLeft() - c->X) / (&points[i].X - &points[j].X);
-                c->X = r->GetLeft();
-            }
-            else if (code & RIGHT) {
-                c->Y += (&points[i].Y - &points[j].Y) * (float)(r->GetRight() - c->X) / (&points[i].X - &points[j].X);
-                c->X = r->GetRight();
-            }
-            else if (code & BOT) {
-                c->X += (&points[i].X - &points[j].X) * (float)(r->GetBottom() - c->Y) / (&points[i].Y - &points[j].Y);
-                c->Y = r->GetBottom();
-            }
-            else if (code & TOP) {
-                c->X += (&points[i].X - &points[j].X) * (float)(r->GetTop() - c->Y) / (&points[i].Y - &points[j].Y);
-                c->Y = r->GetTop();
-            }
-
-            if (code == code_a) {
-                points[i].X = c->X;
-                points[i].Y = c->Y;
-                code_a = vcode(r, &points[i]);
-            }
-            else {
-                points[j].X = c->X;
-                points[j].Y = c->Y;
-                code_b = vcode(r, &points[j]);
-            }
-
-
-        }
-        Display(hdc, &points[i], &points[j]);
-        
-    }   
-    return 0;
-}
-
-//int cohen_sutherland(RectF* r, PointF* a, PointF* b, HDC hdc)
-//{
-//    int code_a, code_b, code; /* код концов отрезка */
-//    PointF* c; /* одна из точек */
-//
-//    code_a = vcode(r, a);
-//    code_b = vcode(r, b);
-//
-//    /* пока одна из точек отрезка вне прямоугольника */
-//    while (code_a | code_b) {
-//        /* если обе точки с одной стороны прямоугольника, то отрезок не пересекает прямоугольник */
-//        if (code_a & code_b)
-//            return -1;
-//
-//        /* выбираем точку c с ненулевым кодом */
-//        if (code_a) {
-//            code = code_a;
-//            c = a;
-//        }
-//        else {
-//            code = code_b;
-//            c = b;
-//        }
-//
-//        /* если c левее r, то передвигаем c на прямую x = r->x_min
-//           если c правее r, то передвигаем c на прямую x = r->x_max */
-//        if (code & LEFT) {
-//            c->Y += (a->Y - b->Y) * (r->GetLeft() - c->X) / (a->X - b->X);
-//            c->X = r->GetLeft();
-//        }
-//        else if (code & RIGHT) {
-//            c->Y += (a->Y - b->Y) * (r->GetRight() - c->X) / (a->X - b->X);
-//            c->X = r->GetRight();
-//        }/* если c ниже r, то передвигаем c на прямую y = r->y_min
-//            если c выше r, то передвигаем c на прямую y = r->y_max */
-//        else if (code & BOT) {
-//            c->X += (a->X - b->X) * (r->GetBottom() - c->Y) / (a->Y - b->Y);
-//            c->Y = r->GetBottom();
-//        }
-//        else if (code & TOP) {
-//            c->X += (a->X - b->X) * (r->GetTop() - c->Y) / (a->Y - b->Y);
-//            c->Y = r->GetTop();
-//        }
-//
-//        /* обновляем код */
-//        if (code == code_a) {
-//            a = c;
-//            code_a = vcode(r, a);
-//        }
-//        else {
-//            b = c;
-//            code_b = vcode(r, b);
-//        }
-//    }
-//
-//    Display(hdc, a, b);
-//
-//    /* оба кода равны 0, следовательно обе точки в прямоугольнике */
-//    return 0;
-//}
-
-// Глобальные переменные:
-HINSTANCE hInst;                                // текущий экземпляр
-WCHAR szTitle[MAX_LOADSTRING];                  // Текст строки заголовка
-WCHAR szWindowClass[MAX_LOADSTRING];            // имя класса главного окна
-
-GdiplusStartupInput gdiplusStartupInput;
-ULONG_PTR           gdiplusToken;
-
-// Отправить объявления функций, включенных в этот модуль кода:
-ATOM                MyRegisterClass(HINSTANCE hInstance);
-BOOL                InitInstance(HINSTANCE, int);
-LRESULT CALLBACK    WndProc(HWND, UINT, WPARAM, LPARAM);
-INT_PTR CALLBACK    About(HWND, UINT, WPARAM, LPARAM);
-
-int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
-                     _In_opt_ HINSTANCE hPrevInstance,
-                     _In_ LPWSTR    lpCmdLine,
-                     _In_ int       nCmdShow)
-{
-    GdiplusStartup(&gdiplusToken, &gdiplusStartupInput, NULL);
-    UNREFERENCED_PARAMETER(hPrevInstance);
-    UNREFERENCED_PARAMETER(lpCmdLine);
-
-    // TODO: Разместите код здесь.
-
-    // Инициализация глобальных строк
-    LoadStringW(hInstance, IDS_APP_TITLE, szTitle, MAX_LOADSTRING);
-    LoadStringW(hInstance, IDC_CGGLAB22, szWindowClass, MAX_LOADSTRING);
-    MyRegisterClass(hInstance);
-
-    // Выполнить инициализацию приложения:
-    if (!InitInstance (hInstance, nCmdShow))
-    {
-        return FALSE;
-    }
-
-    HACCEL hAccelTable = LoadAccelerators(hInstance, MAKEINTRESOURCE(IDC_CGGLAB22));
-
-    MSG msg;
-
-    // Цикл основного сообщения:
-    while (GetMessage(&msg, nullptr, 0, 0))
-    {
-        if (!TranslateAccelerator(msg.hwnd, hAccelTable, &msg))
-        {
-            TranslateMessage(&msg);
-            DispatchMessage(&msg);
-        }
-    }
-    GdiplusShutdown(gdiplusToken);
-    return (int) msg.wParam;
-}
-
-
-
-//
-//  ФУНКЦИЯ: MyRegisterClass()
-//
-//  ЦЕЛЬ: Регистрирует класс окна.
-//
-ATOM MyRegisterClass(HINSTANCE hInstance)
-{
-    WNDCLASSEXW wcex;
-
-    wcex.cbSize = sizeof(WNDCLASSEX);
-
-    wcex.style          = CS_HREDRAW | CS_VREDRAW;
-    wcex.lpfnWndProc    = WndProc;
-    wcex.cbClsExtra     = 0;
-    wcex.cbWndExtra     = 0;
-    wcex.hInstance      = hInstance;
-    wcex.hIcon          = LoadIcon(hInstance, MAKEINTRESOURCE(IDI_CGGLAB22));
-    wcex.hCursor        = LoadCursor(nullptr, IDC_ARROW);
-    wcex.hbrBackground  = (HBRUSH)(COLOR_WINDOW+1);
-    wcex.lpszMenuName   = MAKEINTRESOURCEW(IDC_CGGLAB22);
-    wcex.lpszClassName  = szWindowClass;
-    wcex.hIconSm        = LoadIcon(wcex.hInstance, MAKEINTRESOURCE(IDI_SMALL));
-
-    return RegisterClassExW(&wcex);
-}
-
-//
-//   ФУНКЦИЯ: InitInstance(HINSTANCE, int)
-//
-//   ЦЕЛЬ: Сохраняет маркер экземпляра и создает главное окно
-//
-//   КОММЕНТАРИИ:
-//
-//        В этой функции маркер экземпляра сохраняется в глобальной переменной, а также
-//        создается и выводится главное окно программы.
-//
-BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
-{
-   hInst = hInstance; // Сохранить маркер экземпляра в глобальной переменной
-
-   HWND hWnd = CreateWindowW(szWindowClass, szTitle, WS_OVERLAPPEDWINDOW,
-      CW_USEDEFAULT, 0, CW_USEDEFAULT, 0, nullptr, nullptr, hInstance, nullptr);
-
-   if (!hWnd)
-   {
-      return FALSE;
-   }
-
-   ShowWindow(hWnd, nCmdShow);
-   UpdateWindow(hWnd);
-
-   return TRUE;
-}
-
-//
-//  ФУНКЦИЯ: WndProc(HWND, UINT, WPARAM, LPARAM)
-//
-//  ЦЕЛЬ: Обрабатывает сообщения в главном окне.
-//
-//  WM_COMMAND  - обработать меню приложения
-//  WM_PAINT    - Отрисовка главного окна
-//  WM_DESTROY  - отправить сообщение о выходе и вернуться
-//
-//
-LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
-{
-    switch (message)
-    {
-    case WM_COMMAND:
-        {
-            int wmId = LOWORD(wParam);
-            // Разобрать выбор в меню:
-            switch (wmId)
-            {
-            case IDM_ABOUT:
-                DialogBox(hInst, MAKEINTRESOURCE(IDD_ABOUTBOX), hWnd, About);
-                break;
-            case IDM_EXIT:
-                DestroyWindow(hWnd);
-                break;
-            default:
-                return DefWindowProc(hWnd, message, wParam, lParam);
-            }
-        }
-        break;
-    case WM_PAINT:
-        {
-            PAINTSTRUCT ps;
-            HDC hdc = BeginPaint(hWnd, &ps);
-            Graphics g(hdc);
-            g.Clear(Color::White);
-            
-            Pen pen(Color::Black);
-
-            RectF r(100.f, 100.f, 500.f, 300.f);
-            g.DrawRectangle(&pen, r);
-
-            //PointF a(50.f, 50.f);
-            //PointF b(550.f, 550.f);
-
-            //int result = cohen_sutherland(&r, &a, &b, hdc);
-
-            WorldWindow wWnd(-50, -50, 50, 50);
-
-            ViewPort vPort(150, 50, 300, 150);
-            vPort.Width = 600;
-            vPort.Height = 600;
-
-            const int n = 64;
-
-            PointF points[n];
-
-            float tMax = 10 * M_PI;
-            float tMin = 0;
-            float dt = (tMax - tMin) / (float)(n - 1);
-            
-            for (int i = 0; i < n; i++)
-            {                
-                points[i].X = 24 * cos(dt * i) - 5 * (float)cos(24 / 5 * dt * i);
-                points[i].Y = 24 * sin(dt * i) - 5 * (float)sin(24 / 5 * dt * i);
-            }
-
-            WorldToViewport(wWnd, vPort, points, n);
-
-            int result = cohen_sutherland(&r, points, n, hdc);
-
-            //g.DrawCurve(&pen, points, n);
-
-            EndPaint(hWnd, &ps);
-        }
-        break;
-    case WM_DESTROY:
-        PostQuitMessage(0);
-        break;
-    default:
-        return DefWindowProc(hWnd, message, wParam, lParam);
-    }
-    return 0;
-}
-
-// Обработчик сообщений для окна "О программе".
-INT_PTR CALLBACK About(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam)
-{
-    UNREFERENCED_PARAMETER(lParam);
-    switch (message)
-    {
-    case WM_INITDIALOG:
-        return (INT_PTR)TRUE;
-
-    case WM_COMMAND:
-        if (LOWORD(wParam) == IDOK || LOWORD(wParam) == IDCANCEL)
-        {
-            EndDialog(hDlg, LOWORD(wParam));
-            return (INT_PTR)TRUE;
-        }
-        break;
-    }
-    return (INT_PTR)FALSE;
+	Graphics drawingBoard(hdc);
+	drawingBoard.Clear(Color::White);
+	Pen curvePen(Color(0, 0, 0), 2.0f);
+	Pen borderPen(Color::Black);
+	WorldWindow w(-36, 10, 10, -36); // кординаты мирового окна
+	Viewport vp(100, 100, 600, 600); // координаты порта просмотра
+	drawingBoard.DrawRectangle(&borderPen, 100, 100, 500, 500);
+	std::vector<Gdiplus::GpPointF> parabola = Curve(0, 10 * PI, 1000, f);
+	DrawPolyline(drawingBoard, &curvePen, parabola, w, vp);
 }
