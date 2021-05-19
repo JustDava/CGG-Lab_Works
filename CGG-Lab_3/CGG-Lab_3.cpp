@@ -16,6 +16,7 @@ ULONG_PTR           gdiplusToken;
 int frame_step = 0;
 float dist = 0.f;
 float angle = 0.f;
+float t = 0.f;
 
 HINSTANCE hInst;                                // текущий экземпляр
 WCHAR szTitle[MAX_LOADSTRING];                  // Текст строки заголовка
@@ -32,7 +33,6 @@ LRESULT CALLBACK    WndProc(HWND, UINT, WPARAM, LPARAM);
 INT_PTR CALLBACK    About(HWND, UINT, WPARAM, LPARAM);
 
 void                Display(HDC);
-void                DrawWheels(HDC, Graphics*);
 void Tween(const PointF*, const PointF*, PointF*, int, float);
 
 int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
@@ -133,6 +133,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
         frameIndex = (frameIndex + 1) % frameCount;
         image->SelectActiveFrame(&FrameDimensionTime, frameIndex);
         frame_step++;
+        t += 0.01f;
         InvalidateRect(hWnd, NULL, FALSE);
         break;
     }
@@ -255,6 +256,69 @@ void DrawBike(Graphics& g)
     g.DrawLine(&blackPen, Qpt1, Qpt2);
 }
 
+void DrawStar(Graphics& g)
+{
+    Rect rect;
+    g.GetVisibleClipBounds(&rect);
+    Bitmap backbuffer(rect.Width, rect.Height, &g);
+
+    Graphics temp(&backbuffer);
+    temp.SetSmoothingMode(SmoothingModeHighQuality);
+
+    Pen starPen(Color::Snow, 2.f);
+    SolidBrush starBrush(Color::Snow);
+
+    float _X = -800.f; //смещение звезды по X
+    float _Y = 200.f; //смещение звезды по Y
+
+    //PointF start_star_Points[] = {
+    //    PointF(900.f, 20.f),
+    //    PointF(905.f, 25.f),
+    //    PointF(920.f, 25.f),
+    //    PointF(910.f, 30.f),
+    //    PointF(915.f, 35.f),
+    //    PointF(900.f, 33.f),
+    //    PointF(885.f, 35.f),
+    //    PointF(890.f, 30.f),
+    //    PointF(880.f, 25.f),
+    //    PointF(895.f, 25.f),
+    //};
+
+    PointF start_star_Points[] = {
+        PointF(900.f, 20.f),
+        PointF(890.f, 35.f),
+        PointF(910.f, 25.f),
+        PointF(890.f, 25.f),
+        PointF(910.f, 35.f),
+    };
+
+    PointF end_star_Points[] = {
+        PointF(900.f + _X, 20.f + _Y),
+        PointF(880.f + _X, 45.f + _Y),
+        PointF(920.f + _X, 30.f + _Y),
+        PointF(880.f + _X, 30.f + _Y),
+        PointF(920.f + _X, 45.f + _Y),
+    };
+
+    //PointF end_star_Points[] = {
+    //    PointF(900.f + _X, 20.f + _Y),
+    //    PointF(915.f + _X, 35.f + _Y),
+    //    PointF(930.f + _X, 35.f + _Y),
+    //    PointF(920.f + _X, 40.f + _Y),
+    //    PointF(930.f + _X, 50.f + _Y),
+    //    PointF(900.f + _X, 43.f + _Y),
+    //    PointF(870.f + _X, 50.f + _Y),
+    //    PointF(880.f + _X, 40.f + _Y),
+    //    PointF(870.f + _X, 35.f + _Y),
+    //    PointF(885.f + _X, 35.f + _Y),
+    //};
+
+    PointF int_star_Points[5];
+
+    Tween(start_star_Points, end_star_Points, int_star_Points, 5, t);
+    g.FillPolygon(&starBrush, int_star_Points, 5, FillModeWinding);
+}
+
 void Display(HDC hdc)
 {
     Graphics g(hdc);
@@ -265,15 +329,24 @@ void Display(HDC hdc)
     Bitmap backBuffer(rect.Width, rect.Height, &g);
 
     Graphics temp(&backBuffer);
-    temp.DrawImage(image, 0, 0, rect.Width, rect.Height);
+    temp.DrawImage(image, 0, 0, rect.Width, rect.Height);    
 
     angle = -90.f * frame_step / frameCount;
-
+    DrawStar(temp);
+    if (t < 1)
+    {
+        DrawStar(temp);
+    }
+    if (t >= 1)
+    {
+        t = 0;
+    }
     if (frame_step < 50)
     {
         dist = 5.f * (frame_step - 50);
         temp.TranslateTransform(0.f + dist, 0.f);
         DrawBike(temp);
+
     }
     else if (frame_step < 150)
     {
@@ -284,6 +357,20 @@ void Display(HDC hdc)
     {
         frame_step = -1;
         temp.ResetTransform();
-    }
+    }    
     g.DrawImage(&backBuffer, rect);
+}
+
+
+PointF Tween(const PointF& A, const PointF& B, float t)
+{
+    return PointF(A.X * (1.f - t) + B.X * t, A.Y * (1.f - t) + B.Y * t);
+}
+
+void Tween(const PointF* A, const PointF* B, PointF* P, int count, float t)
+{
+    for (int i = 0; i < count; i++)
+    {
+        P[i] = Tween(A[i], B[i], t);
+    }
 }
